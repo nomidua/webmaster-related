@@ -2,8 +2,9 @@
 /**
  * Plugin Name: WebMaster Related
  * Plugin URI: https://github.com/nomidua/webmaster-related
+ * Update URI: https://github.com/nomidua/webmaster-related
  * Description: Блок «Читайте также» внутри текста записи: 1–2 вставки со ссылкой и миниатюрой, подбор по меткам и рубрике, кеш подборки в записи, без JavaScript.
- * Version: 1.2
+ * Version: 1.3
  * Author: nomidua
  * Requires at least: 6.2
  * Requires PHP: 7.4
@@ -13,7 +14,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('WMR_VERSION', '1.2');
+define('WMR_VERSION', '1.3');
 define('WMR_FILE', __FILE__);
 define('WMR_REPO', 'nomidua/webmaster-related');
 
@@ -461,8 +462,9 @@ add_filter('pre_set_site_transient_update_plugins', function ($t) {
 	$base = plugin_basename(WMR_FILE);
 	if ($r && version_compare($r['version'], WMR_VERSION, '>')) {
 		$t->response[$base] = (object) ['slug' => 'webmaster-related', 'plugin' => $base, 'new_version' => $r['version'], 'package' => $r['zip'], 'url' => $r['url']];
-	} elseif (isset($t->response[$base])) {
+	} else {
 		unset($t->response[$base]);
+		$t->no_update[$base] = (object) ['slug' => 'webmaster-related', 'plugin' => $base, 'new_version' => WMR_VERSION, 'package' => '', 'url' => 'https://github.com/' . WMR_REPO];
 	}
 	return $t;
 });
