@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/nomidua/webmaster-related
  * Update URI: https://github.com/nomidua/webmaster-related
  * Description: Блок «Читайте также» внутри текста записи: 1–2 вставки со ссылкой и миниатюрой, подбор по меткам и рубрике, кеш подборки в записи, без JavaScript.
- * Version: 1.4
+ * Version: 1.4.1
  * Author: nomidua
  * Requires at least: 6.2
  * Requires PHP: 7.4
@@ -14,7 +14,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('WMR_VERSION', '1.4');
+define('WMR_VERSION', '1.4.1');
 define('WMR_FILE', __FILE__);
 define('WMR_REPO', 'nomidua/webmaster-related');
 
@@ -197,8 +197,11 @@ function wmr_top_nodes($html) {
 			if (!$stack) $start = $t[0][1];
 			$stack[] = $tag;
 		} else {
-			if (!$stack || end($stack) !== $tag) return null;
-			array_pop($stack);
+			// Лишний закрывающий тег (например, </p> от темы перед рекламой) пропускаем, как браузер
+			$j = count($stack) - 1;
+			while ($j >= 0 && $stack[$j] !== $tag) $j--;
+			if ($j < 0) continue;
+			$stack = array_slice($stack, 0, $j);
 			if (!$stack) $nodes[] = ['tag' => $tag, 's' => $start, 'e' => $t[0][1] + strlen($t[0][0])];
 		}
 	}
