@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/nomidua/webmaster-related
  * Update URI: https://github.com/nomidua/webmaster-related
  * Description: Блок «Читайте также» внутри текста записи: 1–2 вставки со ссылкой и миниатюрой, подбор по меткам и рубрике, кеш подборки в записи, без JavaScript.
- * Version: 1.4.1
+ * Version: 1.5
  * Author: nomidua
  * Requires at least: 6.2
  * Requires PHP: 7.4
@@ -14,7 +14,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('WMR_VERSION', '1.4.1');
+define('WMR_VERSION', '1.5');
 define('WMR_FILE', __FILE__);
 define('WMR_REPO', 'nomidua/webmaster-related');
 
@@ -70,8 +70,16 @@ function wmr_t($ru, $uk) {
 /* ------------------------------------------------------------------ */
 
 function wmr_post_lang($id) {
+	static $c = [];
+	if (isset($c[$id])) return $c[$id];
 	$l = get_post_meta($id, 'post_lang', true);
-	return in_array($l, ['ru', 'uk'], true) ? $l : '';
+	if (!in_array($l, ['ru', 'uk'], true)) {
+		// Нет поля post_lang (например, ЛП) — определяем по буквам і ї є ґ в заголовке и начале текста
+		$p = get_post($id);
+		$t = $p ? $p->post_title . ' ' . mb_substr(wp_strip_all_tags((string) $p->post_content), 0, 3000) : '';
+		$l = preg_match('/[іїєґІЇЄҐ]/u', $t) ? 'uk' : (preg_match('/[а-яё]/iu', $t) ? 'ru' : '');
+	}
+	return $c[$id] = $l;
 }
 
 /* ------------------------------------------------------------------ */
@@ -124,6 +132,19 @@ function wmr_term_ids($id, $tax) {
 	return is_array($t) ? array_map('intval', wp_list_pluck($t, 'term_id')) : [];
 }
 
+/* Похожие заголовки: половина и больше значимых слов (от 4 букв) совпадает */
+function wmr_title_words($id) {
+	preg_match_all('/[\p{L}\p{N}]{4,}/u', mb_strtolower(wp_strip_all_tags(get_the_title($id))), $m);
+	return array_unique($m[0]);
+}
+
+function wmr_similar($a, $b) {
+	$wa = wmr_title_words($a);
+	$wb = wmr_title_words($b);
+	$min = min(count($wa), count($wb));
+	return $min > 0 && count(array_intersect($wa, $wb)) / $min >= 0.5;
+}
+
 function wmr_pick($post) {
 	$tags  = wmr_term_ids($post->ID, 'post_tag');
 	$cats  = wmr_term_ids($post->ID, 'category');
@@ -149,7 +170,9 @@ function wmr_pick($post) {
 		}
 		usort($scored, function ($a, $b) { return $b[0] <=> $a[0] ?: $b[1] <=> $a[1]; });
 		foreach ($scored as $r) {
-			if (!in_array($r[2], $found, true)) $found[] = $r[2];
+			if (in_array($r[2], $found, true)) continue;
+			foreach ($found as $f) if (wmr_similar($f, $r[2])) continue 2;
+			$found[] = $r[2];
 			if (count($found) >= 2) break 2;
 		}
 	}
