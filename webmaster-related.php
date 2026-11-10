@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/nomidua/webmaster-related
  * Update URI: https://github.com/nomidua/webmaster-related
  * Description: Блок «Читайте также» внутри текста записи: 1–2 вставки со ссылкой и миниатюрой, подбор по меткам и рубрике, кеш подборки в записи, без JavaScript.
- * Version: 1.3
+ * Version: 1.4
  * Author: nomidua
  * Requires at least: 6.2
  * Requires PHP: 7.4
@@ -14,7 +14,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('WMR_VERSION', '1.3');
+define('WMR_VERSION', '1.4');
 define('WMR_FILE', __FILE__);
 define('WMR_REPO', 'nomidua/webmaster-related');
 
@@ -38,6 +38,7 @@ function wmr_defaults() {
 		'accent'        => '',
 		'line'          => 4,
 		'hover'         => 'zoom',
+		'thumb'         => 1,
 		'ratio'         => '4:3',
 		'img_w'         => 96,
 		'img_h'         => 72,
@@ -300,7 +301,7 @@ function wmr_block($id, $label) {
 	if ($title === '') return '';
 	$img = '';
 	$tid = get_post_thumbnail_id($id);
-	if ($tid && ($src = wp_get_attachment_image_src($tid, 'medium'))) {
+	if (wmr_opt('thumb') && $tid && ($src = wp_get_attachment_image_src($tid, 'medium'))) {
 		[$w, $h] = wmr_thumb_size();
 		$set = wp_get_attachment_image_srcset($tid, 'medium');
 		$img = '<span class="wmr-thumb"><img src="' . esc_url($src[0]) . '"' . ($set ? ' srcset="' . esc_attr($set) . '" sizes="' . $w . 'px"' : '') . ' width="' . $w . '" height="' . $h . '" alt="" loading="lazy" decoding="async"></span>';
@@ -378,6 +379,7 @@ function wmr_settings_page() {
 			'excl_tags'    => sanitize_text_field($in['excl_tags'] ?? ''),
 			'accent'       => preg_replace('~[;{}<>]~', '', sanitize_text_field($in['accent'] ?? '')),
 			'line'         => max(0, min(10, (int) ($in['line'] ?? 4))),
+			'thumb'        => empty($in['thumb']) ? 0 : 1,
 			'ratio'        => in_array($in['ratio'] ?? '', ['16:9', '4:3', '3:4', '1:1', 'custom'], true) ? $in['ratio'] : '4:3',
 			'img_w'        => max(40, min(300, (int) ($in['img_w'] ?? 96))),
 			'img_h'        => max(40, min(400, (int) ($in['img_h'] ?? 72))),
@@ -423,7 +425,7 @@ function wmr_settings_page() {
 	$f(wmr_t('Картинка при наведении', 'Картинка при наведенні'), '<select name="hover">' . $hs . '</select>');
 	$rs = '';
 	foreach (['16:9' => '16:9', '4:3' => '4:3', '3:4' => '3:4', '1:1' => '1:1', 'custom' => wmr_t('Свой размер', 'Свій розмір')] as $k => $l) $rs .= '<option value="' . esc_attr($k) . '"' . selected($o['ratio'], $k, false) . '>' . esc_html($l) . '</option>';
-	$f(wmr_t('Картинка', 'Картинка'), '<select name="ratio">' . $rs . '</select> &nbsp; ' . esc_html(wmr_t('ширина', 'ширина')) . ' <input type="number" min="40" max="300" class="small-text" name="img_w" value="' . (int) $o['img_w'] . '"> px &nbsp; ' . esc_html(wmr_t('высота', 'висота')) . ' <input type="number" min="40" max="400" class="small-text" name="img_h" value="' . (int) $o['img_h'] . '"> px', wmr_t('Высота берётся из пропорции; поле «высота» — только для «Свой размер». На телефоне картинка на 17% меньше.', 'Висота береться з пропорції; поле «висота» — лише для «Свій розмір». На телефоні картинка на 17% менша.'));
+	$f(wmr_t('Картинка', 'Картинка'), '<label><input type="checkbox" name="thumb" value="1"' . checked($o['thumb'], 1, false) . '> ' . esc_html(wmr_t('Показывать', 'Показувати')) . '</label> &nbsp; <select name="ratio">' . $rs . '</select> &nbsp; ' . esc_html(wmr_t('ширина', 'ширина')) . ' <input type="number" min="40" max="300" class="small-text" name="img_w" value="' . (int) $o['img_w'] . '"> px &nbsp; ' . esc_html(wmr_t('высота', 'висота')) . ' <input type="number" min="40" max="400" class="small-text" name="img_h" value="' . (int) $o['img_h'] . '"> px', wmr_t('Без галочки картинка не выводится вообще (только текст). Высота берётся из пропорции; поле «высота» — только для «Свой размер». На телефоне картинка на 17% меньше.', 'Без галочки картинка не виводиться взагалі (лише текст). Висота береться з пропорції; поле «висота» — лише для «Свій розмір». На телефоні картинка на 17% менша.'));
 	$f(wmr_t('Фон', 'Фон'), '<input type="text" class="regular-text" name="bg" value="' . esc_attr($o['bg']) . '" placeholder="rgba(127,127,127,.08)">', wmr_t('Пусто — лёгкий серый.', 'Порожньо — легкий сірий.'));
 	$f(wmr_t('Свой CSS', 'Свій CSS'), '<textarea name="css" rows="9" class="large-text code">' . esc_textarea(trim((string) $o['css']) !== '' ? $o['css'] : wmr_css_skeleton()) . '</textarea>', wmr_t('Добавляется после стилей блока. Пустые правила ничего не меняют — впишите свойства в нужный класс.', 'Додається після стилів блоку. Порожні правила нічого не змінюють — впишіть властивості в потрібний клас.'));
 	echo '</table><p class="submit"><button type="submit" name="wmr_save" class="button button-primary">' . esc_html(wmr_t('Сохранить', 'Зберегти')) . '</button> <button type="submit" name="wmr_flush" class="button">' . esc_html(wmr_t('Сбросить подборки', 'Скинути добірки')) . '</button></p></form>';
