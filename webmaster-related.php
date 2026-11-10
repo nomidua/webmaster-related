@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/nomidua/webmaster-related
  * Update URI: https://github.com/nomidua/webmaster-related
  * Description: Блок «Читайте также» внутри текста записи: 1–2 вставки со ссылкой и миниатюрой, подбор по меткам и рубрике, кеш подборки в записи, без JavaScript.
- * Version: 1.5
+ * Version: 1.6
  * Author: nomidua
  * Requires at least: 6.2
  * Requires PHP: 7.4
@@ -14,7 +14,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('WMR_VERSION', '1.5');
+define('WMR_VERSION', '1.6');
 define('WMR_FILE', __FILE__);
 define('WMR_REPO', 'nomidua/webmaster-related');
 
@@ -43,6 +43,9 @@ function wmr_defaults() {
 		'img_w'         => 96,
 		'img_h'         => 72,
 		'bg'            => '',
+		'lines_pc'      => 3,
+		'lines_mob'     => 3,
+		'title_max'     => 0,
 		'css'           => wmr_css_skeleton(),
 	];
 }
@@ -303,20 +306,39 @@ function wmr_css() {
 	$css .= '.wmr-related .wmr-thumb img{display:block;width:100%!important;height:100%!important;max-width:none!important;margin:0!important;object-fit:cover;transition:transform .3s ease,filter .3s ease}';
 	$css .= '.wmr-related .wmr-body{display:flex;flex-direction:column;gap:4px;min-width:0}';
 	$css .= '.wmr-related .wmr-label{font-size:12px;line-height:1.2;text-transform:uppercase;letter-spacing:.04em;opacity:.7}';
-	$css .= '.wmr-related .wmr-title{font-weight:700;font-size:.95em;line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}';
+	$css .= '.wmr-related .wmr-title{font-weight:700;font-size:.95em;line-height:1.3;' . wmr_clamp((int) wmr_opt('lines_pc')) . '}';
 	$css .= '.wmr-related .wmr-link:hover .wmr-title{text-decoration:underline}';
 	$fx = ['zoom' => 'transform:scale(1.06)', 'shift' => 'transform:scale(1.08) translateX(3px)', 'dark' => 'filter:brightness(.75)'];
 	$h  = (string) wmr_opt('hover');
 	if (isset($fx[$h])) $css .= '.wmr-related .wmr-link:hover .wmr-thumb img{' . $fx[$h] . '}';
-	$css .= '@media(max-width:767px){.wmr-related .wmr-thumb{flex-basis:' . $mw . 'px;width:' . $mw . 'px}.wmr-related .wmr-link{gap:12px}}';
+	$css .= '@media(max-width:767px){.wmr-related .wmr-thumb{flex-basis:' . $mw . 'px;width:' . $mw . 'px}.wmr-related .wmr-link{gap:12px}.wmr-related .wmr-title{' . wmr_clamp((int) wmr_opt('lines_mob')) . '}}';
 	$css .= (string) wmr_opt('css');
 	return '<style id="wmr-css">' . wp_strip_all_tags($css) . '</style>';
+}
+
+/* Ограничение заголовка по строкам (0 — без ограничения) */
+function wmr_clamp($n) {
+	$n = max(0, min(5, $n));
+	return $n ? 'display:-webkit-box;-webkit-line-clamp:' . $n . ';line-clamp:' . $n . ';-webkit-box-orient:vertical;overflow:hidden' : 'display:block;-webkit-line-clamp:unset;line-clamp:none;overflow:visible';
+}
+
+/* Обрезка заголовка по целому слову до N знаков (0 — без обрезки) */
+function wmr_cut($s, $max) {
+	if ($max <= 0 || mb_strlen($s) <= $max) return $s;
+	$c = mb_substr($s, 0, $max + 1);
+	$p = mb_strrpos($c, ' ');
+	$c = $p !== false && $p >= $max / 2 ? mb_substr($c, 0, $p) : mb_substr($s, 0, $max);
+	return rtrim($c, " ,.;:!?-–—«(") . '…';
+}
+
+function wmr_ratios() {
+	return ['16:9' => [16, 9], '4:3' => [4, 3], '3:4' => [3, 4], '1:1' => [1, 1]];
 }
 
 /* Размер миниатюры: ширина и высота в px по пропорции из настроек */
 function wmr_thumb_size() {
 	$w = max(40, min(300, (int) wmr_opt('img_w')));
-	$r = ['16:9' => [16, 9], '4:3' => [4, 3], '3:4' => [3, 4], '1:1' => [1, 1]];
+	$r = wmr_ratios();
 	$k = (string) wmr_opt('ratio');
 	$h = isset($r[$k]) ? (int) round($w * $r[$k][1] / $r[$k][0]) : max(40, min(400, (int) wmr_opt('img_h')));
 	return [$w, $h];
@@ -332,7 +354,7 @@ function wmr_block($id, $label) {
 		$set = wp_get_attachment_image_srcset($tid, 'medium');
 		$img = '<span class="wmr-thumb"><img src="' . esc_url($src[0]) . '"' . ($set ? ' srcset="' . esc_attr($set) . '" sizes="' . $w . 'px"' : '') . ' width="' . $w . '" height="' . $h . '" alt="" loading="lazy" decoding="async"></span>';
 	}
-	return '<div class="wmr-related"><a class="wmr-link" href="' . esc_url(get_permalink($id)) . '">' . $img . '<span class="wmr-body"><span class="wmr-label">' . esc_html($label) . '</span><span class="wmr-title">' . esc_html(wp_strip_all_tags($title)) . '</span></span></a></div>';
+	return '<div class="wmr-related"><a class="wmr-link" href="' . esc_url(get_permalink($id)) . '">' . $img . '<span class="wmr-body"><span class="wmr-label">' . esc_html($label) . '</span><span class="wmr-title">' . esc_html(wmr_cut(wp_strip_all_tags($title), (int) wmr_opt('title_max'))) . '</span></span></a></div>';
 }
 
 add_filter('the_content', function ($html) {
@@ -411,8 +433,12 @@ function wmr_settings_page() {
 			'img_h'        => max(40, min(400, (int) ($in['img_h'] ?? 72))),
 			'hover'        => in_array($in['hover'] ?? '', ['none', 'zoom', 'shift', 'dark'], true) ? $in['hover'] : 'zoom',
 			'bg'           => preg_replace('~[;{}<>]~', '', sanitize_text_field($in['bg'] ?? '')),
+			'lines_pc'     => max(0, min(5, (int) ($in['lines_pc'] ?? 3))),
+			'lines_mob'    => max(0, min(5, (int) ($in['lines_mob'] ?? 3))),
+			'title_max'    => max(0, min(300, (int) ($in['title_max'] ?? 0))),
 			'css'          => wp_strip_all_tags($in['css'] ?? ''),
 		];
+		if (isset(wmr_ratios()[$o['ratio']])) { $r = wmr_ratios()[$o['ratio']]; $o['img_h'] = max(40, min(400, (int) round($o['img_w'] * $r[1] / $r[0]))); }
 		update_option('wmr_settings', $o, false);
 		wmr_flush();
 		$msg = wmr_t('Сохранено. Подборки пересчитаются при следующем просмотре записей.', 'Збережено. Добірки перерахуються під час наступного перегляду записів.');
@@ -451,7 +477,9 @@ function wmr_settings_page() {
 	$f(wmr_t('Картинка при наведении', 'Картинка при наведенні'), '<select name="hover">' . $hs . '</select>');
 	$rs = '';
 	foreach (['16:9' => '16:9', '4:3' => '4:3', '3:4' => '3:4', '1:1' => '1:1', 'custom' => wmr_t('Свой размер', 'Свій розмір')] as $k => $l) $rs .= '<option value="' . esc_attr($k) . '"' . selected($o['ratio'], $k, false) . '>' . esc_html($l) . '</option>';
-	$f(wmr_t('Картинка', 'Картинка'), '<label><input type="checkbox" name="thumb" value="1"' . checked($o['thumb'], 1, false) . '> ' . esc_html(wmr_t('Показывать', 'Показувати')) . '</label> &nbsp; <select name="ratio">' . $rs . '</select> &nbsp; ' . esc_html(wmr_t('ширина', 'ширина')) . ' <input type="number" min="40" max="300" class="small-text" name="img_w" value="' . (int) $o['img_w'] . '"> px &nbsp; ' . esc_html(wmr_t('высота', 'висота')) . ' <input type="number" min="40" max="400" class="small-text" name="img_h" value="' . (int) $o['img_h'] . '"> px', wmr_t('Без галочки картинка не выводится вообще (только текст). Высота берётся из пропорции; поле «высота» — только для «Свой размер». На телефоне картинка на 17% меньше.', 'Без галочки картинка не виводиться взагалі (лише текст). Висота береться з пропорції; поле «висота» — лише для «Свій розмір». На телефоні картинка на 17% менша.'));
+	$f(wmr_t('Картинка', 'Картинка'), '<label><input type="checkbox" name="thumb" value="1"' . checked($o['thumb'], 1, false) . '> ' . esc_html(wmr_t('Показывать', 'Показувати')) . '</label> &nbsp; <select name="ratio">' . $rs . '</select> &nbsp; ' . esc_html(wmr_t('ширина', 'ширина')) . ' <input type="number" min="40" max="300" class="small-text" name="img_w" value="' . (int) $o['img_w'] . '"> px &nbsp; ' . esc_html(wmr_t('высота', 'висота')) . ' <input type="number" min="40" max="400" class="small-text" name="img_h" value="' . (int) $o['img_h'] . '"> px', wmr_t('Без галочки картинка не выводится вообще (только текст). При пропорции ширина и высота пересчитываются друг от друга; при «Свой размер» — независимы. На телефоне картинка на 17% меньше.', 'Без галочки картинка не виводиться взагалі (лише текст). При пропорції ширина й висота перераховуються одна від одної; при «Свій розмір» — незалежні. На телефоні картинка на 17% менша.'));
+	echo "<script>(function(){var s=document.querySelector('select[name=ratio]'),w=document.querySelector('input[name=img_w]'),h=document.querySelector('input[name=img_h]'),R={'16:9':[16,9],'4:3':[4,3],'3:4':[3,4],'1:1':[1,1]};if(!s||!w||!h)return;function k(v,a,b){return Math.max(a,Math.min(b,v));}function set(x){var r=R[s.value],y=Math.round(x*r[1]/r[0]);if(y>400||y<40){y=k(y,40,400);x=k(Math.round(y*r[0]/r[1]),40,300);y=Math.round(x*r[1]/r[0]);}w.value=x;h.value=y;}w.addEventListener('change',function(){if(R[s.value])set(k(parseInt(w.value,10)||96,40,300));});h.addEventListener('change',function(){var r=R[s.value];if(r)set(k(Math.round(k(parseInt(h.value,10)||72,40,400)*r[0]/r[1]),40,300));});s.addEventListener('change',function(){if(R[s.value])set(k(parseInt(w.value,10)||96,40,300));});})();</script>";
+	$f(wmr_t('Заголовок', 'Заголовок'), esc_html(wmr_t('строк на ПК', 'рядків на ПК')) . ' <input type="number" min="0" max="5" class="small-text" name="lines_pc" value="' . (int) $o['lines_pc'] . '"> &nbsp; ' . esc_html(wmr_t('на телефоне', 'на телефоні')) . ' <input type="number" min="0" max="5" class="small-text" name="lines_mob" value="' . (int) $o['lines_mob'] . '"> &nbsp; ' . esc_html(wmr_t('макс. знаков', 'макс. знаків')) . ' <input type="number" min="0" max="300" class="small-text" name="title_max" value="' . (int) $o['title_max'] . '">', wmr_t('0 — без ограничения. Знаки: заголовок обрезается по целому слову с «…». Правило -webkit-line-clamp в «Свой CSS» важнее этих настроек.', '0 — без обмеження. Знаки: заголовок обрізається по цілому слову з «…». Правило -webkit-line-clamp у «Свій CSS» важливіше за ці налаштування.'));
 	$f(wmr_t('Фон', 'Фон'), '<input type="text" class="regular-text" name="bg" value="' . esc_attr($o['bg']) . '" placeholder="rgba(127,127,127,.08)">', wmr_t('Пусто — лёгкий серый.', 'Порожньо — легкий сірий.'));
 	$f(wmr_t('Свой CSS', 'Свій CSS'), '<textarea name="css" rows="9" class="large-text code">' . esc_textarea(trim((string) $o['css']) !== '' ? $o['css'] : wmr_css_skeleton()) . '</textarea>', wmr_t('Добавляется после стилей блока. Пустые правила ничего не меняют — впишите свойства в нужный класс.', 'Додається після стилів блоку. Порожні правила нічого не змінюють — впишіть властивості в потрібний клас.'));
 	echo '</table><p class="submit"><button type="submit" name="wmr_save" class="button button-primary">' . esc_html(wmr_t('Сохранить', 'Зберегти')) . '</button> <button type="submit" name="wmr_flush" class="button">' . esc_html(wmr_t('Сбросить подборки', 'Скинути добірки')) . '</button></p></form>';
